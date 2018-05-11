@@ -14,6 +14,54 @@ $app->contentType('text/html; charset=utf-8');
  */
 $app->post('/register', function() use($app) {
 	$response = array();
+	$requiredKeys 	= array('mobile');
+	$requiredValues = array('mobile');
+	verifyRequiredParams($requiredKeys, $requiredValues, 1001);
+	
+	$request['USER_PHONE'] = $app->request->post('mobile');
+	$securekey  = $app->request->post('secure_key');
+	$app->log->debug("request-register=> ".json_encode($app->request->post()));
+	
+	if($request["USER_PHONE"]){
+		if(!preg_match('/^[0-9]{10}+$/', $request["USER_PHONE"])){
+		//if(!preg_match('/^\+?\d+$/', $request["USER_PHONE"])){
+			$response["error_code"]= '1001';
+			$response["message"]  = "Invalid mobile number";
+			$regResponse=array("register_response"=>$response);
+			$app->log->debug(json_encode($regResponse));
+			echoResponse($regResponse);
+			$app->stop();
+		}
+	}
+	
+	if(validateParamsAPISecret(SECURE_KEY,$securekey)) {
+		$db		= new DbHandler();
+		$res	= $db->createUser( $request );
+		if (isset($res['id'])) {
+			$response["error_code"] = '1000';
+			$response["message"]= "Success";
+			$response["user_id"]= $res['id'];
+			$response["mobile"] = $request['USER_PHONE'];
+		} else if ($res == 1) {
+			$response["error_code"] = '1001';
+			$response["message"] = "Failed";
+		} else if ($res == 2) {
+			$response["error_code"] = '1001';
+			$response["message"] = "Sorry, this mobile number already existed";
+			$regResponse=array("register_response"=>$response);	
+		} 
+	}else{
+		$response["error_code"]= '1001';
+		$response["message"]  = "Invalid request";
+	} 	
+	
+	$app->log->debug("register_response=>".json_encode($regResponse));
+	echoResponse(array('register_response'=>$response));
+});
+
+
+$app->post('/register_old', function() use($app) {
+	$response = array();
 	$requiredKeys 	= array('email','username','password');
 	$requiredValues = array('email','username','password');
 	verifyRequiredParams($requiredKeys, $requiredValues, 1001);
@@ -102,7 +150,7 @@ $app->post('/login',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("login_response=>".json_encode($regResponse));
+	$app->log->debug("login_response=>".json_encode($response));
 	echoResponse(array('login_response'=>$response));
 });
 
@@ -111,7 +159,7 @@ $app->post('/login',function() use ($app){
 $app->post('/yourLibrary',function() use ($app){
 	$requiredKeys = array('user_id');
 	verifyRequiredParams($requiredKeys, $requiredKeys, 19001);
-
+		
 	$userId = $app->request->post('user_id');
 	$securekey= $app->request->post('secure_key');
 	$app->log->debug("request-yourLibrary=> ".json_encode($app->request->post()));
@@ -143,11 +191,13 @@ $app->post('/yourLibrary',function() use ($app){
 					);
 				}
 			}
-			
 			$response['error_code'] = 19000;
 			$response["message"] = "Success";
 			$response['recently_played_albums_list'] = $historyInfo;
 			$response['playlist_details'] = $playListInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 19001;
 			$response["message"] = "Invaild user";
@@ -156,7 +206,7 @@ $app->post('/yourLibrary',function() use ($app){
 		$response["error_code"]= 19001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("your_library_response=>".json_encode($regResponse));
+	$app->log->debug("your_library_response=>".json_encode($response));
 	echoResponse(array('your_library_response'=>$response));
 });
 	
@@ -190,6 +240,9 @@ $app->post('/getRecentlyPlayedAlbumsList',function() use ($app){
 			$response['error_code'] = 3000;
 			$response["message"] = "Success";
 			$response['list_of_album'] = $albumInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 3001;
 			$response["message"] = "Invalid user";
@@ -198,7 +251,7 @@ $app->post('/getRecentlyPlayedAlbumsList',function() use ($app){
 		$response["error_code"]= 3001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("recently_played_albums_list_response=>".json_encode($regResponse));
+	$app->log->debug("recently_played_albums_list_response=>".json_encode($response));
 	echoResponse(array('recently_played_albums_list_response'=>$response));
 });
 
@@ -232,6 +285,9 @@ $app->post('/getUserPlayLists',function() use ($app){
 			$response['error_code'] = 4000;
 			$response["message"] = "Success";
 			$response['playlist_details'] = $playListInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 4001;
 			$response["message"] = "Invalid user";
@@ -241,7 +297,7 @@ $app->post('/getUserPlayLists',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("playlists_response=>".json_encode($regResponse));
+	$app->log->debug("playlists_response=>".json_encode($response));
 	echoResponse(array('playlists_response'=>$response));
 });
 
@@ -285,6 +341,9 @@ $app->post('/getPlayListSongs',function() use ($app){
 			$response['error_code'] = 5000;
 			$response["message"] = "Success";
 			$response['songs_details'] = $playListInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 5001;
 			$response["message"] = "Invaild user";
@@ -294,7 +353,7 @@ $app->post('/getPlayListSongs',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("playlist_songs_response=>".json_encode($regResponse));
+	$app->log->debug("playlist_songs_response=>".json_encode($response));
 	echoResponse(array('playlist_songs_response'=>$response));
 });
 
@@ -319,6 +378,9 @@ $app->post('/createPlayList',function() use ($app){
 				$response["error_code"] 	= 6000;
 				$response["message"] 		= "Success";
  				$response["playlist_id"] 	= $res['id'];
+				$userInfo = $db->getUserDetails($request['USER_ID']);
+				$response["user_id"]= $userInfo['USER_ID'];
+				$response["mobile"] = $userInfo['USER_PHONE'];
 // 				$response['playlist_name']	= $request['PLAYLIST_NAME'];
 			} else if ($res == 1) {
 				$response["error_code"] = 6001;
@@ -361,6 +423,9 @@ $app->post('/deletePlayList',function() use ($app){
 			if ($res ==1 ){
 				$response['error_code'] = 7000;
 				$response["message"] = "Success";
+				$userInfo = $db->getUserDetails($request['USER_ID']);
+				$response["user_id"]= $userInfo['USER_ID'];
+				$response["mobile"] = $userInfo['USER_PHONE'];
 // 				$response['playlist_name']	= $playListName;
 			}elseif ($res ==2 ){
 				$response['error_code'] = 7001;
@@ -378,7 +443,7 @@ $app->post('/deletePlayList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("delete_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("delete_playlist_response=>".json_encode($response));
 	echoResponse(array('delete_playlist_response'=>$response));
 });
 
@@ -406,6 +471,9 @@ $app->post('/addRemoveSongsToPlayList',function() use ($app){
 				if (isset($res['id'])) {
 					$response["error_code"] 	= 8000;
 					$response["message"] 		= "Success";
+					$userInfo = $db->getUserDetails($request['USER_ID']);
+					$response["user_id"]= $userInfo['USER_ID'];
+					$response["mobile"] = $userInfo['USER_PHONE'];
 // 					$response["playlist_song_id"] 	= $res['id'];
 				} else if ($res == 1) {
 					$response["error_code"] = 8001;
@@ -457,17 +525,18 @@ $app->post('/addRemoveSongsToPlayList',function() use ($app){
  *  get songs list
  */
 $app->post('/getSongsList',function() use ($app){
-	$requiredKeys = array('user_id','album_id');
+	//$requiredKeys = array('album_id','user_id');
+	$requiredKeys = array('album_id');
 	verifyRequiredParams($requiredKeys, $requiredKeys, 9001);
 
-	$userId = $app->request->post('user_id');
+	//$userId = $app->request->post('user_id');
 	$albumId = $app->request->post('album_id');
 	$securekey= $app->request->post('secure_key');
 	$app->log->debug("request-getSongsList=> ".json_encode($app->request->post()));
 	$db = new DbHandler();
 	$response = array();
 	if(validateParamsAPISecret(SECURE_KEY,$securekey)) {
-		if($db->isUserIdExists($userId)){
+		//if($db->isUserIdExists($userId)){
 			$req['album_id'] = $albumId;
 			$req['limit'] = 50;
 			$req['rating'] = true;
@@ -475,33 +544,35 @@ $app->post('/getSongsList',function() use ($app){
 			$songsDetails = $db->getSongsInfo( $req );
 			$info = array();
 			if (!empty( $songsDetails )){
-//				$songUrl = 'http://ts.digient.co/backoffice/assets/upload_images/song/';
+	//				$songUrl = 'http://ts.digient.co/backoffice/assets/upload_images/song/';
 				foreach ( $songsDetails as $data ){
 					$info[] = array(
 									'song_id'			=> $data['SONG_ID'],
 									'song_name'			=> $data['SONG_NAME'],
 									'song_cover_image'	=> (!empty($data['SONG_COVER_IMAGE'])?NEW_SONG_ASSET_URL.$data['SONG_COVER_IMAGE'].'&w=175&h=175&cf':''),
 									'song_url'			=> (!empty($data['SONG_URL'])?SONG_AUDIO_ASSET_URL.$data['SONG_URL']:''),
-									'high_song_url'			=> (!empty($data['HIGH_SONG_URL'])?SONG_AUDIO_ASSET_URL.$data['HIGH_SONG_URL']:''),
+									'high_song_url'		=> (!empty($data['HIGH_SONG_URL'])?SONG_AUDIO_ASSET_URL.$data['HIGH_SONG_URL']:''),
 									'artist_name'		=> $data['ARTISTS_USERNAME'],
 									'song_rating' 		=> $data['SONG_RATING'] != null ? round($data['SONG_RATING'],2):0,
 								);
 				}
 			}
-
 			$response['error_code'] = 9000;
 			$response["message"] = "Success";
 			$response['list_of_songs'] = $info;
-		}else{
-			$response['error_code'] = 9001;
-			$response["message"] = "Invaild user";
-		}
+			/* $userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE']; */
+		/* }else{
+			$response['error_code'] = 10001;
+			$response["message"] = "Invalid user";
+		} */
 	}else{
 		$response["error_code"]= 9001;
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("get_songs_list_response=>".json_encode($regResponse));
+	$app->log->debug("get_songs_list_response=>".json_encode($response));
 	echoResponse(array('get_songs_list_response'=>$response));
 });
 
@@ -543,7 +614,7 @@ $app->post('/getAlbumsList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("get_albums_list_response=>".json_encode($regResponse));
+	$app->log->debug("get_albums_list_response=>".json_encode($response));
 	echoResponse(array('get_albums_list_response'=>$response));
 });
 	
@@ -552,16 +623,16 @@ $app->post('/getAlbumsList',function() use ($app){
  *  get artist list
  */
 $app->post('/getArtistsList',function() use ($app){
-	$requiredKeys = array('user_id');
-	verifyRequiredParams($requiredKeys, $requiredKeys, 9001);
+	//$requiredKeys = array('user_id');
+	//verifyRequiredParams($requiredKeys, $requiredKeys, 9001);
 
-	$userId = $app->request->post('user_id');
+	//$userId = $app->request->post('user_id');
 	$securekey= $app->request->post('secure_key');
 	$app->log->debug("request-getArtistsList=> ".json_encode($app->request->post()));
 	$db = new DbHandler();
 	$response = array();
 	if(validateParamsAPISecret(SECURE_KEY,$securekey)) {
-		if($db->isUserIdExists($userId)){
+		//if($db->isUserIdExists($userId)){
 			$details = $db->getArtistDetails();
 			$info = array();
 			if (!empty( $details )){
@@ -577,16 +648,16 @@ $app->post('/getArtistsList',function() use ($app){
 			$response['error_code'] = 11000;
 			$response["message"] = "Success";
 			$response['list_of_artists'] = $info;
-		}else{
+		/* }else{
 			$response['error_code'] = 11001;
 			$response["message"] = "Invaild user";
-		}
+		} */
 	}else{
 		$response["error_code"]= 11001;
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("get_artists_list_response=>".json_encode($regResponse));
+	$app->log->debug("get_artists_list_response=>".json_encode($response));
 	echoResponse(array('get_artists_list_response'=>$response));
 });
 
@@ -624,6 +695,9 @@ $app->post('/getUserWishlistSongs',function() use ($app){
 			$response['error_code'] = 12000;
 			$response["message"] = "Success";
 			$response['list_of_songs'] = $info;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 12001;
 			$response["message"] = "Invaild User";
@@ -633,7 +707,7 @@ $app->post('/getUserWishlistSongs',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("wish_list_songs_response=>".json_encode($regResponse));
+	$app->log->debug("wish_list_songs_response=>".json_encode($response));
 	echoResponse(array('wish_list_songs_response'=>$response));
 });
 
@@ -660,6 +734,9 @@ $app->post('/addRemoveSongsToWishlist',function() use ($app){
 				if (isset($res['id'])) {
 					$response["error_code"] 	= 13000;
 					$response["message"] 		= "Success";
+					$userInfo = $db->getUserDetails($request['USER_ID']);
+					$response["user_id"]= $userInfo['USER_ID'];
+					$response["mobile"] = $userInfo['USER_PHONE'];
 // 					$response["wishlist_song_id"] 	= $res['id'];
 				} else if ($res == 1) {
 					$response["error_code"] = 13001;
@@ -726,6 +803,9 @@ $app->post('/getUserWishlistAlbums',function() use ($app){
 			$response['error_code'] = 14000;
 			$response["message"] = "Success";
 			$response['list_of_album'] = $info;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 14001;
 			$response["message"] = "Invaild user";
@@ -735,7 +815,7 @@ $app->post('/getUserWishlistAlbums',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("wish_list_albums_response=>".json_encode($regResponse));
+	$app->log->debug("wish_list_albums_response=>".json_encode($response));
 	echoResponse(array('wish_list_albums_response'=>$response));
 });
 
@@ -761,6 +841,9 @@ $app->post('/addRemoveAlbumsToWishlist',function() use ($app){
 				if (isset($res['id'])) {
 					$response["error_code"] 	= 15000;
 					$response["message"] 		= "Success";
+					$userInfo = $db->getUserDetails($request['USER_ID']);
+					$response["user_id"]= $userInfo['USER_ID'];
+					$response["mobile"] = $userInfo['USER_PHONE'];
 // 					$response["wishlist_album_id"] 	= $res['id'];
 				} else if ($res == 1) {
 					$response["error_code"] = 15001;
@@ -827,6 +910,9 @@ $app->post('/gerUserWislistArtists',function() use ($app){
 			$response['error_code'] = 16000;
 			$response["message"] = "Success";
 			$response['list_of_artist'] = $info;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 16001;
 			$response["message"] = "Invaild user";
@@ -836,7 +922,7 @@ $app->post('/gerUserWislistArtists',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("wish_list_artists_response=>".json_encode($regResponse));
+	$app->log->debug("wish_list_artists_response=>".json_encode($response));
 	echoResponse(array('wish_list_artists_response'=>$response));
 });
 
@@ -863,6 +949,9 @@ $app->post('/addRemoveArtistsToWishlist',function() use ($app){
 					$response["error_code"] 	= 17000;
 					$response["message"] 		= "Success";
 					$response["wishlist_artist_id"] 	= $res['id'];
+					$userInfo = $db->getUserDetails($request['USER_ID']);
+					$response["user_id"]= $userInfo['USER_ID'];
+					$response["mobile"] = $userInfo['USER_PHONE'];
 				} else if ($res == 1) {
 					$response["error_code"] = 17001;
 					$response["message"] = "Failed";
@@ -925,6 +1014,9 @@ $app->post('/addSongPlayedHistory',function() use ($app){
 				if (isset($res['id'])) {
 					$response["error_code"] 	= 18000;
 					$response["message"] 		= "Success";
+					$userInfo = $db->getUserDetails($request['USER_ID']);
+					$response["user_id"]= $userInfo['USER_ID'];
+					$response["mobile"] = $userInfo['USER_PHONE'];
 // 					$response["histroy_id"] 	= $res['id'];
 				} else if ($res == 1) {
 					$response["error_code"] = 18001;
@@ -1090,6 +1182,9 @@ $app->post('/getHomeScreenList',function() use ($app){
 			$response['genres'] = $genresInfo;
 			$response['mood'] = $moodInfo;
 			$response['popular_playlist'] = $popularInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 20001;
 			$response["message"] = "Invaild user";
@@ -1098,7 +1193,7 @@ $app->post('/getHomeScreenList',function() use ($app){
 		$response["error_code"]= 20001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("your_home_screen_response=>".json_encode($regResponse));
+	$app->log->debug("your_home_screen_response=>".json_encode($response));
 	echoResponse(array('your_home_screen_response'=>$response));
 });
 
@@ -1292,6 +1387,9 @@ $app->post('/getBrowseList',function() use ($app){
 			$response['discover'] = $discoverInfo;
 			$response['genres'] = $genresInfo;
 			$response['mood'] = $moodInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 21001;
 			$response["message"] = "Invaild user";
@@ -1300,7 +1398,7 @@ $app->post('/getBrowseList',function() use ($app){
 		$response["error_code"]= 21001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("browse_list_response=>".json_encode($regResponse));
+	$app->log->debug("browse_list_response=>".json_encode($response));
 	echoResponse(array('browse_list_response'=>$response));
 });
 
@@ -1367,6 +1465,9 @@ $app->post('/getTypeBasedAlbumList',function() use ($app){
 			$response['error_code'] = 22000;
 			$response["message"] = "Success";
 			$response['album_list'] = $typeInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 22001;
 			$response["message"] = "Invaild user";
@@ -1375,7 +1476,7 @@ $app->post('/getTypeBasedAlbumList',function() use ($app){
 		$response["error_code"]= 22001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("type_based_album_list_response=>".json_encode($regResponse));
+	$app->log->debug("type_based_album_list_response=>".json_encode($response));
 	echoResponse(array('type_based_album_list_response'=>$response));
 });
 
@@ -1425,6 +1526,9 @@ $app->post('/goToAlbum',function() use ($app){
 			$response["message"] = "Success";
 			$response['album_info'] = $albumInfo;
 			$response['song_list'] = $typeInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 23001;
 			$response["message"] = "Invaild user";
@@ -1433,7 +1537,7 @@ $app->post('/goToAlbum',function() use ($app){
 		$response["error_code"]= 23001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("go_to_album_response=>".json_encode($regResponse));
+	$app->log->debug("go_to_album_response=>".json_encode($response));
 	echoResponse(array('go_to_album_response'=>$response));
 });
 	
@@ -1515,6 +1619,9 @@ $app->post('/goToArtist',function() use ($app){
 			$response["message"] = "Success";
 			$response['artist_info'] = $artistInfo;
 			$response['song_list'] = $typeInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 24001;
 			$response["message"] = "Invaild user";
@@ -1523,7 +1630,7 @@ $app->post('/goToArtist',function() use ($app){
 		$response["error_code"]= 24001;
 		$response["message"]  = "Invalid request";
 	}
-	$app->log->debug("go_to_artist_response=>".json_encode($regResponse));
+	$app->log->debug("go_to_artist_response=>".json_encode($response));
 	echoResponse(array('go_to_artist_response'=>$response));
 });
 	
@@ -1634,6 +1741,9 @@ $app->post('/getHomePlayLists',function() use ($app){
 			$response['error_code'] = 4000;
 			$response["message"] = "Success";
 			$response['playlist_details'] = $playListInfo;
+			$userInfo = $db->getUserDetails($userId);
+			$response["user_id"]= $userInfo['USER_ID'];
+			$response["mobile"] = $userInfo['USER_PHONE'];
 		}else{
 			$response['error_code'] = 4001;
 			$response["message"] = "Invalid user";
@@ -1643,7 +1753,7 @@ $app->post('/getHomePlayLists',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("playlists_response=>".json_encode($regResponse));
+	$app->log->debug("playlists_response=>".json_encode($response));
 	echoResponse(array('playlists_response'=>$response));
 });
 
@@ -1698,7 +1808,7 @@ $app->post('/getTracksList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("get_songs_list_response=>".json_encode($regResponse));
+	$app->log->debug("get_songs_list_response=>".json_encode($response));
 	echoResponse(array('get_songs_list_response'=>$response));
 });
 /**
@@ -1731,7 +1841,7 @@ $app->post('/sendOTP',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("send_otp_response=>".json_encode($regResponse));
+	$app->log->debug("send_otp_response=>".json_encode($response));
 	echoResponse(array('send_otp_response'=>$response));
 });
 
@@ -1763,7 +1873,7 @@ $app->post('/verifyOTP',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("verify_otp_response=>".json_encode($regResponse));
+	$app->log->debug("verify_otp_response=>".json_encode($response));
 	echoResponse(array('verify_otp_response'=>$response));
 });
 
@@ -1796,7 +1906,7 @@ $app->post('/homeBanners',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("home_banners_response=>".json_encode($regResponse));
+	$app->log->debug("home_banners_response=>".json_encode($response));
 	echoResponse(array('home_banners_response'=>$response));
 });
 
@@ -1831,7 +1941,7 @@ $app->post('/homePlaylist',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("home_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("home_playlist_response=>".json_encode($response));
 	echoResponse(array('home_playlist_response'=>$response));
 });
 
@@ -1868,7 +1978,7 @@ $app->post('/homePlaylistSongs',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("home_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("home_playlist_response=>".json_encode($response));
 	echoResponse(array('home_playlist_response'=>$response));
 });
 
@@ -1908,7 +2018,7 @@ $app->post('/moodPlaylist',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("mood_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("mood_playlist_response=>".json_encode($response));
 	echoResponse(array('mood_playlist_response'=>$response));
 });
 
@@ -1943,7 +2053,7 @@ $app->post('/genresPlaylist',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("genres_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("genres_playlist_response=>".json_encode($response));
 	echoResponse(array('genres_playlist_response'=>$response));
 });
 
@@ -2025,7 +2135,7 @@ $app->post('/searchSongs',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("search_songs_list_response=>".json_encode($regResponse));
+	$app->log->debug("search_songs_list_response=>".json_encode($response));
 	echoResponse(array('search_songs_list_response'=>$response));
 });
 
@@ -2093,7 +2203,7 @@ $app->post('/artistSongsVideosList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("artist_songs_videos_list_response=>".json_encode($regResponse));
+	$app->log->debug("artist_songs_videos_list_response=>".json_encode($response));
 	echoResponse(array('artist_songs_videos_list_response'=>$response));
 });
 
@@ -2124,7 +2234,7 @@ $app->post('/videoListenedCount',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("video_listened_response=>".json_encode($regResponse));
+	$app->log->debug("video_listened_response=>".json_encode($response));
 	echoResponse(array('video_listened_response'=>$response));
 });
 
@@ -2155,7 +2265,7 @@ $app->post('/songListenedCount',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("song_listened_response=>".json_encode($regResponse));
+	$app->log->debug("song_listened_response=>".json_encode($response));
 	echoResponse(array('song_listened_response'=>$response));
 });
 
@@ -2242,7 +2352,7 @@ $app->post('/getVideosList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("get_videos_list_response=>".json_encode($regResponse));
+	$app->log->debug("get_videos_list_response=>".json_encode($response));
 	echoResponse(array('get_videos_list_response'=>$response));
 });
 
@@ -2334,7 +2444,7 @@ $app->post('/myMusicList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("my_music_response=>".json_encode($regResponse));
+	$app->log->debug("my_music_response=>".json_encode($response));
 	echoResponse(array('my_music_response'=>$response));
 });
 
@@ -2478,7 +2588,7 @@ $app->post('/songRating',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("song_rating_response=>".json_encode($regResponse));
+	$app->log->debug("song_rating_response=>".json_encode($response));
 	echoResponse(array('song_rating_response'=>$response));
 });
 

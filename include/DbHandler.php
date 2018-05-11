@@ -1,5 +1,5 @@
 <?php 
-error_reporting(1);
+//error_reporting(E_ALL);
 class DbHandler {
     private $conn;
     private $dbh;
@@ -45,6 +45,25 @@ class DbHandler {
 	
 	//Method will create a new user
     public function createUser( $request ){
+        if (!$this->isUserPhoneExists($request['USER_PHONE'])) {
+			$stmt = $this->conn->prepare("INSERT INTO ".$this->users."(USER_PHONE,USER_STATUS) values(?, 1)");
+			$stmt->bind_param("s", $request['USER_PHONE']);
+			$result = $stmt->execute();
+			$inserId =  $this->conn->insert_id;
+			$stmt->close();
+			if ($result) {
+				$res['id'] = $inserId;
+				return $res;
+			} else {
+				return 1;
+			}
+			
+        } else {
+            return 2;
+        }
+    }
+
+	 public function createUser_old( $request ){
         if (!$this->isUserEmailExists($request['USER_EMAIL'])) {
         	if (!$this->isUserExists($request['USER_USERNAME'])) {
 	            $password = md5($request['USER_PASSWORD']);
@@ -66,7 +85,6 @@ class DbHandler {
             return 3;
         }
     }
-
     //Method for user login
     public function userLogin($username,$pass){
     	if (empty( $username ) || empty( $pass ) ){
@@ -103,14 +121,15 @@ class DbHandler {
     	if (empty( $userId )){
     		return 0;
     	}
-    	$stmt = $this->conn->prepare("SELECT USER_ID, USER_USERNAME FROM ".$this->users." WHERE USER_ID=?");
+    	$stmt = $this->conn->prepare("SELECT USER_ID, USER_USERNAME,USER_PHONE FROM ".$this->users." WHERE USER_ID=?");
     	$stmt->bind_param("s",$userId);
     	$stmt->execute();
-    	$stmt->bind_result($user_id, $user_name);
+    	$stmt->bind_result($user_id, $user_name,$mobile);
     	$stmt->fetch();
     	$stmt->close();
     	$data['USER_ID']=$user_id;
     	$data['USER_NAME']=$user_name;
+    	$data['USER_PHONE']=$mobile;
 //     	$user = $stmt->get_result()->fetch_assoc();
 //     	$stmt->close();
     	return $data;
@@ -202,6 +221,7 @@ class DbHandler {
     
     //This method will return album detail
     public function getAlbumDetails($req =''){
+		$albumInfo=array();
         $where = '';
         if(isset($req['search']) && !empty($req['search'])){
             $where .= " AND ALBUM_NAME LIKE '%".$req['search']."%' ";
@@ -241,8 +261,9 @@ class DbHandler {
     }
     
     public function getUserRecentlyPlayedAlbumList( $userId, $limit='' ){
-    	if (empty( $userId )){
-    		return 0;
+    	$albumInfo=array();
+		if (empty( $userId )){
+    		return $albumInfo;
     	}
     	$count		= (!empty( $limit )?$limit:LIMIT_COUNT);
     	
@@ -250,7 +271,6 @@ class DbHandler {
     					JOIN ".$this->albums." as album ON sh.ALBUM_ID=album.ALBUM_ID
     					JOIN ".$this->artists." as art ON art.ARTISTS_ID=album.ALBUM_ARTISTS_ID
     					WHERE sh.USER_ID = ? AND album.ALBUM_IS_PODCAST = 0 ORDER by sh.HISTORY_ID DESC LIMIT ".$count;
-    	//echo $sql_query;exit;
     	$stmt = $this->pdo->prepare($sql_query);
     	$stmt->bindParam(1, $userId);
     	$stmt->execute();
@@ -260,7 +280,8 @@ class DbHandler {
     	while( $row = $stmt->fetch(PDO::FETCH_ASSOC) ) {
     		$albumInfo[] = $row; // appends each row to the array
     	}
-    	return $albumInfo;
+		
+		return $albumInfo;
     }
     
     public function getUserPlayList($userId){
@@ -273,6 +294,7 @@ class DbHandler {
     	$stmt = $this->pdo->prepare($sql_query);
     	$stmt->bindParam(1, $userId);
     	$stmt->execute();
+		$playListInfo =array();
     	while( $row = $stmt->fetch(PDO::FETCH_ASSOC) ) {
     		$playListInfo[] = $row; // appends each row to the array
     	}
@@ -289,12 +311,13 @@ class DbHandler {
 //     	$playListInfo['USER_ID']=$user_id;
 //     	$playListInfo['PLAYLIST_ID']=$playList_id;
 //     	$playListInfo['PLAYLIST_NAME']=$playListName;
-    	return $playListInfo;
+    	//return $playListInfo;
     }
     
     public function getUserPlayListSongs( $userId, $playListId ){
-    	if (empty( $userId ) || empty( $playListId)){
-    		return 0;
+    	$playListInfo =array();
+		if (empty( $userId ) || empty( $playListId)){
+    		return $playListInfo;
     	}
     	
     	$sql_query = "SELECT album.ALBUM_ID, album.ALBUM_NAME, album.ALBUM_LOGO, art.ARTISTS_ID, art.ARTISTS_USERNAME, song.SONG_ID, song.SONG_NAME,song.SONG_COVER_IMAGE, song.SONG_URL,song.HIGH_SONG_URL, pl.PLAYLIST_ID, pl.PLAYLIST_NAME
@@ -461,11 +484,10 @@ class DbHandler {
     
     //This method will return wish list song detail
     public function getWishListSongDetails( $userId ){
+		$wishList = array();
     	if (empty( $userId )){
-    		return 0;
+    		return $wishList;
     	}
-    	$wishList = array();
-
         $sql_query = "SELECT song.SONG_ID, song.SONG_NAME, song.SONG_COVER_IMAGE, song.SONG_URL,song.HIGH_SONG_URL,song.HIGH_SONG_URL, album.ALBUM_ID, album.ALBUM_LOGO, album.ALBUM_NAME, art.ARTISTS_USERNAME, song.SONG_LISTENED_COUNT, AVG(RATING) as SONG_RATING FROM $this->wishlist_songs as ws
                         JOIN $this->songs as song ON song.SONG_ID = ws.SONG_ID
                         JOIN ".$this->albums." as album ON album.ALBUM_ID = song.SONG_ALBUM_ID 
@@ -544,8 +566,9 @@ class DbHandler {
     }
     
     public function getWishListAlbumsDetails( $userId ){
-    	if (empty( $userId )){
-    		return 0;
+    	$wishList =array();
+		if (empty( $userId )){
+    		return $wishList;
     	}
     	$sql_query = "SELECT al.ALBUM_ID, al.ALBUM_NAME, al.ALBUM_LOGO FROM $this->wishlist_albums as wa 
     					JOIN $this->albums as al ON al.ALBUM_ID=wa.ALBUM_ID WHERE wa.USER_ID = ? LIMIT ".LIMIT_COUNT;
@@ -618,8 +641,9 @@ class DbHandler {
     }
     
     public function getWishListArtistDetails( $userId ){
-    	if (empty( $userId )){
-    		return 0;
+    	$wishList =array();
+		if (empty( $userId )){
+    		return $wishList;
     	}
     	
     	$sql_query = "SELECT art.ARTISTS_ID, art.ARTISTS_USERNAME, type.ARTISTS_TYPE_NAME FROM $this->wishlist_artists as wa 
@@ -786,8 +810,9 @@ class DbHandler {
     	}
     }
     public function getUserInspiredRecentListeningSongList( $userId , $limit='' ){
-    	if (empty( $userId )){
-    		return 0;
+    	$albumInfo =array();
+		if (empty( $userId )){
+    		return $albumInfo;
     	}
     	$count		= (!empty( $limit )?$limit:LIMIT_COUNT);
     	/*$sql_query = "SELECT sh.USER_ID,song.SONG_ID,song.SONG_NAME, count(sh.SONG_ID) as LISTEN_COUNT FROM ".$this->song_history." As sh
@@ -800,7 +825,7 @@ class DbHandler {
     	$stmt = $this->pdo->prepare($sql_query);
     	$stmt->bindParam(1, $userId);
     	$stmt->execute();
-    	 
+		
     	while( $row = $stmt->fetch(PDO::FETCH_ASSOC) ) {
     		$albumInfo[] = $row; // appends each row to the array
     	}
@@ -1006,6 +1031,7 @@ class DbHandler {
     }
     
     public function getGenresInfo(){
+		$albumInfo=array();
     	$sql_query = "SELECT GENRES_ID, GENRES_NAME FROM $this->genres_types";
     	$stmt = $this->pdo->prepare($sql_query);
     	$stmt->execute();
@@ -1016,6 +1042,7 @@ class DbHandler {
     }
     
     public function getMoodInfo(){
+		$albumInfo=array();
     	$sql_query = "SELECT MOOD_ID, MOOD_NAME FROM $this->mood_types";
     	$stmt = $this->pdo->prepare($sql_query);
     	$stmt->execute();
@@ -1144,8 +1171,9 @@ class DbHandler {
     }
     
     public function getTypeBasedSongList( $genresId,  $limit=''){
+		$albumInfo=array();
     	if (empty( $genresId )){
-    		return 0;
+    		return albumInfo;
     	}
     	$count		= (!empty( $limit)?$limit:LIMIT_COUNT);
     
@@ -1165,8 +1193,9 @@ class DbHandler {
     }
 	
 	public function getTypeBasedAlbumList( $genresId,  $limit=''){
-    	if (empty( $genresId )){
-    		return 0;
+    	$albumInfo=array();
+		if (empty( $genresId )){
+    		return $albumInfo;
     	}
     	$count		= (!empty( $limit)?$limit:LIMIT_COUNT);
     
@@ -1192,6 +1221,7 @@ class DbHandler {
      * @return unknown
      */
     public function popularPlayList( $limit='' ){
+		$albumInfo=array();
     	$count		= (!empty( $limit)?$limit:LIMIT_COUNT);
     
     	$sql_query = "SELECT song.SONG_ID,song.SONG_NAME, song.SONG_LISTENED_COUNT,song.SONG_COVER_IMAGE, song.SONG_URL, album.ALBUM_ID,album.ALBUM_NAME, album.ALBUM_LOGO FROM ".$this->songs." As song
@@ -1320,7 +1350,7 @@ class DbHandler {
         
         $stmt = $this->pdo->prepare($sql_query);
         $stmt->execute();
-        $playListInfo = [];
+        $playListInfo = array();
         while( $row = $stmt->fetch(PDO::FETCH_ASSOC) ) {
             $playListInfo[] = $row; // appends each row to the array
         }
@@ -1362,12 +1392,11 @@ class DbHandler {
     //Checking whether a phoen number already exist
     private function isUserPhoneExists($userPhone) {
         $stmt = $this->conn->prepare("SELECT USER_ID from ".$this->users." WHERE USER_PHONE = ?");
-        $stmt->bind_param("s", $userPhone);
+        echo $stmt->bind_param("s", $userPhone);
         $stmt->execute();
         $stmt->bind_result($userId);
         $stmt->fetch();
         $stmt->close();
-
         if ( $userId > 0 && $userId != null )
         {
             return $userId;
