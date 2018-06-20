@@ -1,5 +1,5 @@
 <?php 
-error_reporting(E_ALL);
+//error_reporting(E_ALL);
 include_once("include/Config.php");
 include_once("include/DbHandler.php");
 include_once("include/functions.php");
@@ -16,9 +16,9 @@ $app->post('/register', function() use($app) {
 	$response = array();
 	$requiredKeys 	= array('mobile');
 	$requiredValues = array('mobile');
-	verifyRequiredParams($requiredKeys, $requiredValues, 1001);
+	verifyRequiredParams($requiredKeys, $requiredValues, 1001); 
 	
-	$request['USER_PHONE'] = $app->request->post('mobile');
+ 	$request['USER_PHONE'] = $app->request->post('mobile');
 	$securekey  = $app->request->post('secure_key');
 	$app->log->debug("request-register=> ".json_encode($app->request->post()));
 	
@@ -46,16 +46,18 @@ $app->post('/register', function() use($app) {
 			$response["error_code"] = '1001';
 			$response["message"] = "Failed";
 		} else if ($res == 2) {
+			$info = $db->getUserMobileDetails($request['USER_PHONE']);
 			$response["error_code"] = '1001';
 			$response["message"] = "Sorry, this mobile number already existed";
-			$regResponse=array("register_response"=>$response);	
+			$response["user_id"]= $info['USER_ID'];
 		} 
 	}else{
 		$response["error_code"]= '1001';
 		$response["message"]  = "Invalid request";
 	} 	
-	
-	$app->log->debug("register_response=>".json_encode($regResponse));
+		
+	$app->log->debug("register_response=>".json_encode($response));
+
 	echoResponse(array('register_response'=>$response));
 });
 
@@ -388,7 +390,6 @@ $app->post('/createPlayList',function() use ($app){
 			} else if ($res == 2) {
 				$response["error_code"] = 6001;
 				$response["message"] = "Sorry, this playlist name already existed";
-				$regResponse=array("register_response"=>$response);
 			} 
 		}else{
 			$response['error_code'] = 6001;
@@ -399,7 +400,7 @@ $app->post('/createPlayList',function() use ($app){
 		$response["message"]  = "Invalid request";
 	}
 
-	$app->log->debug("create_playlist_response=>".json_encode($regResponse));
+	$app->log->debug("create_playlist_response=>".json_encode($response));
 	echoResponse(array('create_playlist_response'=>$response));
 });
 
@@ -2156,7 +2157,7 @@ $app->post('/artistSongsVideosList',function() use ($app){
 	$response = array();
 	if(validateParamsAPISecret(SECURE_KEY,$securekey)) {
 
-			$req['search'] = $search;
+			//$req['search'] = $search;
 			$req['artistId'] = $artistId;
 			$req['artist'] = true;
 			$req['rating'] = true;
